@@ -6,10 +6,12 @@ import {
   type TransactionDetail,
   type TransactionSummary,
 } from '../services/database/transactions'
+import { previewTransaction } from '../services/printer/receipt'
 import { formatRupiah } from '../utils/rupiah'
 
 const transactions = ref<TransactionSummary[]>([])
 const detail = ref<TransactionDetail | null>(null)
+const preview = ref('')
 const error = ref('')
 const loading = ref(true)
 
@@ -29,6 +31,7 @@ async function open(id: number) {
   error.value = ''
   try {
     detail.value = await getTransaction(id)
+    preview.value = await previewTransaction(detail.value)
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Detail gagal dimuat'
   }
@@ -67,6 +70,7 @@ async function open(id: number) {
       <div class="flex justify-between"><span>Tunai</span><span>{{ formatRupiah(detail.paymentAmount) }}</span></div>
       <div class="flex justify-between"><span>Kembalian</span><span>{{ formatRupiah(detail.changeAmount) }}</span></div>
       <p>Cetak: {{ detail.printStatus }}</p>
+      <pre class="overflow-x-auto whitespace-pre rounded-lg bg-stone-100 p-3 font-mono text-xs leading-tight">{{ preview }}</pre>
     </article>
   </section>
 </template>
