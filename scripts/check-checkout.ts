@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { cartSubtotal, cashChange, checkoutTotal, transactionNumber } from '../src/domain/checkout.ts'
 import { receiptPreview, wrapText, type ReceiptData } from '../src/services/printer/layout.ts'
+import { describePrintFailure } from '../src/services/printer/errors.ts'
 
 const lines = [
   { quantity: 2, unitPrice: 10000 },
@@ -37,5 +38,9 @@ assert.ok(preview.split('\n').every((line) => line.length <= 32))
 assert.match(preview, /20\.000/)
 assert.match(preview, /TRX-20260923-001/)
 assert.ok(wrapText('Kopi susu gula aren yang sangat panas', 32).every((line) => line.length <= 32))
+assert.equal(describePrintFailure('unavailable', 'Bluetooth no disponible').code, 'bluetooth_off')
+assert.equal(describePrintFailure('not_found', 'missing').code, 'not_found')
+assert.equal(describePrintFailure('connect_failed', 'socket timed out').code, 'timeout')
+assert.equal(describePrintFailure('', 'Solo Android').code, 'unavailable')
 
 console.log('checkout checks ok')
