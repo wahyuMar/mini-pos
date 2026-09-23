@@ -48,5 +48,6 @@ assert.equal(printStatusAfter(true, true), 'success')
 assert.equal(printStatusAfter(true, false), 'failed')
 assert.equal(createsTransaction('checkout'), true)
 assert.equal(createsTransaction('retry'), false)
+assert.equal(createsTransaction('reprint'), false)
 
 console.log('checkout checks ok')

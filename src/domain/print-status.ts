@@ -3,6 +3,6 @@ export function printStatusAfter(attempted: boolean, ok: boolean): 'pending' | '
   return ok ? 'success' : 'failed'
 }
 
-export function createsTransaction(action: 'checkout' | 'retry'): boolean {
+export function createsTransaction(action: 'checkout' | 'retry' | 'reprint'): boolean {
   return action === 'checkout'
 }
