@@ -49,3 +49,7 @@ export function clearCart(): void {
 export function currentSubtotal(): number {
   return cartSubtotal(items)
 }
+
+export function cartCount(): number {
+  return items.reduce((sum, item) => sum + item.quantity, 0)
+}

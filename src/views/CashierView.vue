@@ -13,12 +13,22 @@ import {
   setCartQuantity,
 } from '../stores/cart'
 import { formatRupiah } from '../utils/rupiah'
+import IconSearch from '../components/icons/IconSearch.vue'
+import IconX from '../components/icons/IconX.vue'
+import IconPlus from '../components/icons/IconPlus.vue'
+import IconMinus from '../components/icons/IconMinus.vue'
+import IconTrash from '../components/icons/IconTrash.vue'
+import IconCart from '../components/icons/IconCart.vue'
+import IconCheck from '../components/icons/IconCheck.vue'
+import IconAlert from '../components/icons/IconAlert.vue'
+import IconPrinter from '../components/icons/IconPrinter.vue'
+import IconImage from '../components/icons/IconImage.vue'
 
 const products = ref<Product[]>([])
 const categories = ref<Category[]>([])
 const categoryId = ref<number | null>(null)
 const search = ref('')
-const discount = ref(0)
+const discount = ref<number>(0)
 const payment = ref<number | null>(null)
 const error = ref('')
 const receipt = ref('')
@@ -26,6 +36,8 @@ const printStatus = ref<'pending' | 'success' | 'failed' | ''>('')
 const printMessage = ref('')
 const saleId = ref<number | null>(null)
 const loading = ref(true)
+const isPaying = ref(false)
+const showMobileCart = ref(false)
 
 const visibleProducts = computed(() => {
   const term = search.value.trim().toLowerCase()
@@ -36,6 +48,7 @@ const visibleProducts = computed(() => {
 })
 
 const subtotal = computed(() => cartSubtotal(cartItems()))
+
 const total = computed(() => {
   try {
     return checkoutTotal(subtotal.value, discount.value || 0)
@@ -43,6 +56,7 @@ const total = computed(() => {
     return null
   }
 })
+
 const change = computed(() => {
   if (total.value == null || payment.value == null) return null
   try {
@@ -51,6 +65,29 @@ const change = computed(() => {
     return null
   }
 })
+
+const quickCashAmounts = computed(() => {
+  if (total.value == null || total.value <= 0) return []
+  const t = total.value
+  const set = new Set<number>()
+  set.add(t) // Exact amount
+
+  const standardDenominations = [10000, 20000, 50000, 100000, 200000]
+  for (const denom of standardDenominations) {
+    if (denom > t) {
+      set.add(denom)
+    }
+  }
+  // Next 10k ceiling if not exact
+  const nextTenK = Math.ceil(t / 10000) * 10000
+  if (nextTenK > t) set.add(nextTenK)
+
+  return Array.from(set).sort((a, b) => a - b).slice(0, 4)
+})
+
+function getCartQty(productId: number): number {
+  return cartItems().find((item) => item.productId === productId)?.quantity ?? 0
+}
 
 onMounted(async () => {
   try {
@@ -63,11 +100,14 @@ onMounted(async () => {
 })
 
 async function pay() {
+  if (isPaying.value) return
   error.value = ''
   receipt.value = ''
   printMessage.value = ''
   printStatus.value = ''
   saleId.value = null
+  isPaying.value = true
+
   try {
     const saved = await saveSale({
       lines: cartItems().map((item) => ({ ...item })),
@@ -79,11 +119,15 @@ async function pay() {
     payment.value = null
     saleId.value = saved.id
     receipt.value = `${saved.transactionNumber} tersimpan. Kembalian ${formatRupiah(saved.changeAmount)}.`
+    showMobileCart.value = false
+
     const delivered = await deliverReceipt(saved.id)
     printStatus.value = delivered.status
     printMessage.value = delivered.message
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Transaksi gagal'
+  } finally {
+    isPaying.value = false
   }
 }
 
@@ -101,95 +145,386 @@ async function retryPrint() {
 </script>
 
 <template>
-  <section class="space-y-4">
-    <h1 class="text-2xl font-semibold">Kasir</h1>
-    <input
-      v-model="search"
-      class="w-full rounded-lg border border-stone-300 px-3 py-2"
-      placeholder="Cari produk"
-      type="search"
-    />
-    <div class="flex gap-2 overflow-x-auto">
-      <button
-        class="shrink-0 rounded-full px-3 py-1 text-sm"
-        :class="categoryId == null ? 'bg-stone-900 text-white' : 'bg-white'"
-        type="button"
-        @click="categoryId = null"
-      >
-        Semua
-      </button>
-      <button
-        v-for="category in categories"
-        :key="category.id"
-        class="shrink-0 rounded-full px-3 py-1 text-sm"
-        :class="categoryId === category.id ? 'bg-stone-900 text-white' : 'bg-white'"
-        type="button"
-        @click="categoryId = category.id"
-      >
-        {{ category.name }}
-      </button>
-    </div>
-    <p v-if="loading" class="text-sm text-stone-500">Memuat produk…</p>
-    <p v-else-if="visibleProducts.length === 0" class="text-sm text-stone-500">Belum ada produk aktif.</p>
-    <ul v-else class="grid grid-cols-2 gap-2">
-      <li v-for="product in visibleProducts" :key="product.id">
-        <button
-          class="w-full overflow-hidden rounded-xl bg-white text-left shadow-sm"
-          type="button"
-          @click="addToCart({ id: product.id, name: product.name, price: product.price })"
-        >
-          <img v-if="product.photo" :src="product.photo" alt="" class="h-24 w-full object-cover" />
-          <span class="block p-3">
-            <span class="block font-medium">{{ product.name }}</span>
-            <span class="text-sm text-stone-500">{{ formatRupiah(product.price) }}</span>
-          </span>
-        </button>
-      </li>
-    </ul>
-
-    <div class="space-y-3 rounded-xl bg-white p-4 shadow-sm">
-      <h2 class="text-lg font-semibold">Keranjang</h2>
-      <p v-if="cartItems().length === 0" class="text-sm text-stone-500">Keranjang kosong.</p>
-      <ul v-else class="space-y-3">
-        <li v-for="item in cartItems()" :key="item.productId" class="flex items-center justify-between gap-2">
+  <div class="space-y-4">
+    <!-- Success / Error notification banners -->
+    <div
+      v-if="receipt"
+      class="flex flex-col gap-2 rounded-2xl border border-emerald-200 bg-emerald-50/90 p-4 text-emerald-900 shadow-xs backdrop-blur-xs transition-all"
+    >
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+          <div class="flex size-7 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-xs">
+            <IconCheck class="size-4" />
+          </div>
           <div>
-            <p class="font-medium">{{ item.name }}</p>
-            <p class="text-sm text-stone-500">{{ formatRupiah(item.unitPrice) }}</p>
+            <p class="font-bold text-sm text-emerald-950">{{ receipt }}</p>
+            <p v-if="printStatus === 'failed'" class="text-xs font-medium text-rose-700">
+              Transaksi berhasil. Struk gagal dicetak. {{ printMessage }}
+            </p>
+            <p v-else-if="printMessage" class="text-xs font-medium text-emerald-700">
+              {{ printMessage }}
+            </p>
           </div>
-          <div class="flex items-center gap-2">
-            <button class="h-8 w-8 rounded-lg border" type="button" @click="setCartQuantity(item.productId, item.quantity - 1)">−</button>
-            <span>{{ item.quantity }}</span>
-            <button class="h-8 w-8 rounded-lg border" type="button" @click="setCartQuantity(item.productId, item.quantity + 1)">+</button>
-            <button class="text-sm" type="button" @click="removeFromCart(item.productId)">Hapus</button>
-          </div>
-        </li>
-      </ul>
-
-      <label class="block text-sm font-medium">
-        Diskon (Rp)
-        <input v-model.number="discount" class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" min="0" step="1" type="number" />
-      </label>
-      <label class="block text-sm font-medium">
-        Tunai (Rp)
-        <input v-model.number="payment" class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2" min="0" step="1" type="number" />
-      </label>
-      <dl class="space-y-1 text-sm">
-        <div class="flex justify-between"><dt>Subtotal</dt><dd>{{ formatRupiah(subtotal) }}</dd></div>
-        <div class="flex justify-between"><dt>Diskon</dt><dd>{{ formatRupiah(discount || 0) }}</dd></div>
-        <div class="flex justify-between text-base font-semibold"><dt>Total</dt><dd>{{ total == null ? '—' : formatRupiah(total) }}</dd></div>
-        <div class="flex justify-between"><dt>Kembalian</dt><dd>{{ change == null ? '—' : formatRupiah(change) }}</dd></div>
-      </dl>
-      <p v-if="error" class="text-sm text-red-700">{{ error }}</p>
-      <p v-if="receipt" class="text-sm text-stone-700">{{ receipt }}</p>
-      <p v-if="printStatus === 'failed'" class="text-sm text-red-700">Transaksi berhasil. Struk gagal dicetak. {{ printMessage }}</p>
-      <p v-else-if="printMessage" class="text-sm text-stone-600">{{ printMessage }}</p>
-      <div v-if="printStatus === 'failed'" class="grid grid-cols-2 gap-2">
-        <button class="rounded-lg border border-stone-300 py-2 text-sm" type="button" @click="retryPrint">Coba lagi</button>
-        <RouterLink class="rounded-lg border border-stone-300 py-2 text-center text-sm" to="/pengaturan">Hubungkan printer</RouterLink>
+        </div>
+        <button class="text-slate-400 hover:text-slate-600" type="button" @click="receipt = ''">
+          <IconX class="size-4" />
+        </button>
       </div>
-      <button class="w-full rounded-lg bg-stone-900 py-3 font-medium text-white disabled:opacity-40" type="button" :disabled="cartItems().length === 0" @click="pay">
-        Bayar
+
+      <div v-if="printStatus === 'failed'" class="mt-1 flex flex-wrap items-center gap-2 pt-2 border-t border-emerald-100">
+        <button
+          class="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 border border-rose-200 shadow-2xs hover:bg-rose-50 active:scale-95"
+          type="button"
+          @click="retryPrint"
+        >
+          <IconPrinter class="size-3.5" />
+          Coba lagi
+        </button>
+        <RouterLink
+          class="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 border border-slate-200 shadow-2xs hover:bg-slate-50 active:scale-95"
+          to="/pengaturan"
+        >
+          Hubungkan printer
+        </RouterLink>
+      </div>
+    </div>
+
+    <div
+      v-if="error"
+      class="flex items-center gap-2.5 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-xs font-semibold text-rose-800 shadow-xs"
+    >
+      <IconAlert class="size-5 shrink-0 text-rose-600" />
+      <span>{{ error }}</span>
+    </div>
+
+    <!-- Main Dual-Column POS Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 lg:gap-6 items-start">
+      <!-- Left Column: Catalog (Search, Categories, Product Grid) -->
+      <section class="lg:col-span-7 xl:col-span-8 space-y-4">
+        <!-- Search Bar -->
+        <div class="relative">
+          <IconSearch class="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-slate-400 pointer-events-none" />
+          <input
+            v-model="search"
+            class="w-full rounded-2xl border border-slate-200/90 bg-white py-2.5 pl-10 pr-9 text-sm text-slate-800 placeholder-slate-400 shadow-2xs transition-all focus:border-emerald-500 focus:outline-none focus:ring-3 focus:ring-emerald-500/15"
+            placeholder="Cari produk berdasarkan nama..."
+            type="search"
+          />
+          <button
+            v-if="search"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            type="button"
+            @click="search = ''"
+          >
+            <IconX class="size-4" />
+          </button>
+        </div>
+
+        <!-- Category Pills (Horizontal Scroll) -->
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          <button
+            class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-150 active:scale-95"
+            :class="
+              categoryId == null
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-100 hover:text-slate-900'
+            "
+            type="button"
+            @click="categoryId = null"
+          >
+            Semua ({{ products.filter(p => p.isActive).length }})
+          </button>
+          <button
+            v-for="category in categories"
+            :key="category.id"
+            class="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all duration-150 active:scale-95"
+            :class="
+              categoryId === category.id
+                ? 'bg-emerald-600 text-white shadow-xs shadow-emerald-600/20'
+                : 'bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-100 hover:text-slate-900'
+            "
+            type="button"
+            @click="categoryId = category.id"
+          >
+            {{ category.name }}
+          </button>
+        </div>
+
+        <!-- Products Loading / Empty / Grid -->
+        <div v-if="loading" class="flex flex-col items-center justify-center py-16 text-slate-400">
+          <div class="size-8 animate-spin rounded-full border-3 border-emerald-500 border-t-transparent"></div>
+          <p class="mt-3 text-xs font-medium">Memuat katalog produk…</p>
+        </div>
+
+        <div
+          v-else-if="visibleProducts.length === 0"
+          class="flex flex-col items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-white/50 py-16 text-center"
+        >
+          <div class="flex size-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+            <IconSearch class="size-6" />
+          </div>
+          <p class="mt-3 text-sm font-semibold text-slate-700">Tidak ada produk ditemukan</p>
+          <p class="text-xs text-slate-400">Coba kata kunci lain atau pilih kategori Semua.</p>
+        </div>
+
+        <div v-else class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+          <button
+            v-for="product in visibleProducts"
+            :key="product.id"
+            class="group relative flex flex-col overflow-hidden rounded-2xl border bg-white text-left transition-all duration-150 hover:shadow-md hover:-translate-y-0.5 active:scale-95"
+            :class="
+              getCartQty(product.id) > 0
+                ? 'border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs'
+                : 'border-slate-200/80 hover:border-slate-300 shadow-2xs'
+            "
+            type="button"
+            @click="addToCart({ id: product.id, name: product.name, price: product.price })"
+          >
+            <!-- Product Image / Placeholder -->
+            <div class="relative aspect-4/3 w-full overflow-hidden bg-slate-100">
+              <img
+                v-if="product.photo"
+                :src="product.photo"
+                :alt="product.name"
+                class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                loading="lazy"
+              />
+              <div v-else class="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 text-slate-300">
+                <IconImage class="size-8 stroke-[1.5]" />
+              </div>
+
+              <!-- Cart quantity indicator pill on image -->
+              <span
+                v-if="getCartQty(product.id) > 0"
+                class="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white shadow-sm ring-2 ring-white animate-scale"
+              >
+                {{ getCartQty(product.id) }}
+              </span>
+
+              <!-- Category Tag -->
+              <span
+                v-if="product.categoryName"
+                class="absolute left-2 top-2 max-w-[70%] truncate rounded-md bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-xs"
+              >
+                {{ product.categoryName }}
+              </span>
+            </div>
+
+            <!-- Product Details -->
+            <div class="flex flex-1 flex-col justify-between p-3">
+              <h3 class="line-clamp-2 text-xs font-semibold text-slate-900 group-hover:text-emerald-700">
+                {{ product.name }}
+              </h3>
+              <p class="mt-1 text-sm font-bold text-emerald-600">
+                {{ formatRupiah(product.price) }}
+              </p>
+            </div>
+          </button>
+        </div>
+      </section>
+
+      <!-- Right Column: Cart Panel (Sticky on Desktop, Modal/Drawer on Mobile) -->
+      <aside
+        class="fixed inset-x-0 bottom-16 z-40 max-h-[82vh] overflow-y-auto rounded-t-3xl border-t border-slate-200 bg-white p-5 shadow-2xl transition-transform duration-300 lg:static lg:col-span-5 lg:z-auto lg:max-h-none lg:rounded-3xl lg:border lg:border-slate-200/90 lg:p-5 lg:shadow-xs xl:col-span-4"
+        :class="showMobileCart ? 'translate-y-0' : 'translate-y-full lg:translate-y-0'"
+      >
+        <!-- Mobile Drawer Header Handle -->
+        <div class="mb-3 flex items-center justify-between lg:mb-4">
+          <div class="flex items-center gap-2">
+            <div class="flex size-7 items-center justify-center rounded-xl bg-slate-900 text-white">
+              <IconCart class="size-4" />
+            </div>
+            <h2 class="text-base font-bold text-slate-900">Keranjang Belanja</h2>
+            <span
+              v-if="cartItems().length > 0"
+              class="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-700"
+            >
+              {{ cartItems().length }}
+            </span>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button
+              v-if="cartItems().length > 0"
+              class="text-xs font-semibold text-rose-600 hover:text-rose-700"
+              type="button"
+              @click="clearCart"
+            >
+              Kosongkan
+            </button>
+            <button
+              class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 lg:hidden"
+              type="button"
+              @click="showMobileCart = false"
+            >
+              <IconX class="size-5" />
+            </button>
+          </div>
+        </div>
+
+        <!-- Empty Cart State -->
+        <div
+          v-if="cartItems().length === 0"
+          class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 py-10 text-center"
+        >
+          <div class="flex size-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-300">
+            <IconCart class="size-6 stroke-[1.5]" />
+          </div>
+          <p class="mt-2 text-xs font-bold text-slate-700">Keranjang masih kosong</p>
+          <p class="text-[11px] text-slate-400">Ketuk produk di katalog untuk menambahkan.</p>
+        </div>
+
+        <!-- Cart Item List -->
+        <div v-else class="space-y-2.5 max-h-[35vh] overflow-y-auto pr-1">
+          <div
+            v-for="item in cartItems()"
+            :key="item.productId"
+            class="flex items-center justify-between gap-2.5 rounded-2xl border border-slate-100 bg-slate-50/70 p-3 transition-colors hover:bg-slate-50"
+          >
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-xs font-bold text-slate-900">{{ item.name }}</p>
+              <p class="text-[11px] font-medium text-slate-400">
+                {{ formatRupiah(item.unitPrice) }} × {{ item.quantity }} =
+                <span class="font-bold text-slate-700">{{ formatRupiah(item.unitPrice * item.quantity) }}</span>
+              </p>
+            </div>
+
+            <!-- Stepper Actions -->
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button
+                class="flex size-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-2xs hover:bg-slate-100 active:scale-90"
+                type="button"
+                @click="setCartQuantity(item.productId, item.quantity - 1)"
+              >
+                <IconMinus class="size-3" />
+              </button>
+              <span class="w-6 text-center text-xs font-bold text-slate-900">{{ item.quantity }}</span>
+              <button
+                class="flex size-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-2xs hover:bg-slate-100 active:scale-90"
+                type="button"
+                @click="setCartQuantity(item.productId, item.quantity + 1)"
+              >
+                <IconPlus class="size-3" />
+              </button>
+              <button
+                class="ml-1 flex size-7 items-center justify-center rounded-lg text-rose-500 hover:bg-rose-50 hover:text-rose-700"
+                type="button"
+                @click="removeFromCart(item.productId)"
+              >
+                <IconTrash class="size-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Payment & Calculation Form -->
+        <div class="mt-4 space-y-3 pt-3 border-t border-slate-200/80 text-xs">
+          <!-- Discount Field -->
+          <div class="flex items-center justify-between gap-3">
+            <label class="font-semibold text-slate-600 shrink-0">Diskon (Rp)</label>
+            <input
+              v-model.number="discount"
+              class="w-36 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-right font-semibold text-slate-800 shadow-2xs focus:border-emerald-500 focus:outline-none"
+              min="0"
+              step="1"
+              type="number"
+            />
+          </div>
+
+          <!-- Cash Payment Field -->
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between gap-3">
+              <label class="font-semibold text-slate-600 shrink-0">Uang Tunai (Rp)</label>
+              <input
+                v-model.number="payment"
+                class="w-36 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-right font-bold text-emerald-700 shadow-2xs focus:border-emerald-500 focus:outline-none"
+                min="0"
+                step="1"
+                placeholder="0"
+                type="number"
+              />
+            </div>
+
+            <!-- Quick Cash Suggestions -->
+            <div v-if="quickCashAmounts.length > 0" class="flex flex-wrap gap-1.5 justify-end">
+              <button
+                v-for="amt in quickCashAmounts"
+                :key="amt"
+                class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-700 transition-colors hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-800 active:scale-95"
+                type="button"
+                @click="payment = amt"
+              >
+                {{ amt === total ? 'Uang Pas' : formatRupiah(amt) }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Summary Breakdown -->
+          <div class="space-y-1.5 rounded-2xl bg-slate-50/80 p-3.5 border border-slate-100">
+            <div class="flex justify-between text-slate-500">
+              <span>Subtotal</span>
+              <span class="font-medium text-slate-700">{{ formatRupiah(subtotal) }}</span>
+            </div>
+            <div class="flex justify-between text-slate-500">
+              <span>Diskon</span>
+              <span class="font-medium text-rose-600">-{{ formatRupiah(discount || 0) }}</span>
+            </div>
+            <div class="flex justify-between text-sm font-extrabold text-slate-900 pt-1.5 border-t border-slate-200/60">
+              <span>Total Tagihan</span>
+              <span class="text-emerald-600">{{ total == null ? '—' : formatRupiah(total) }}</span>
+            </div>
+            <div class="flex justify-between text-xs font-bold pt-1">
+              <span class="text-slate-600">Kembalian</span>
+              <span :class="change != null && change >= 0 ? 'text-emerald-600 font-extrabold' : 'text-slate-400'">
+                {{ change == null ? '—' : formatRupiah(change) }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Checkout Button -->
+          <button
+            class="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 py-3.5 text-sm font-bold text-white shadow-md shadow-emerald-600/25 transition-all duration-150 hover:from-emerald-700 hover:to-teal-700 active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed"
+            type="button"
+            :disabled="cartItems().length === 0 || isPaying"
+            @click="pay"
+          >
+            <span v-if="isPaying" class="size-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+            <IconCheck v-else class="size-4 stroke-[2.5]" />
+            <span>Bayar Sekarang ({{ total == null ? 'Rp 0' : formatRupiah(total) }})</span>
+          </button>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Mobile Floating Checkout Bar (When cart not empty and drawer closed) -->
+    <div
+      v-if="cartItems().length > 0 && !showMobileCart"
+      class="fixed inset-x-4 bottom-20 z-20 flex items-center justify-between rounded-2xl bg-slate-900 p-3.5 text-white shadow-xl shadow-slate-900/30 lg:hidden"
+    >
+      <div class="flex items-center gap-2.5">
+        <div class="flex size-9 items-center justify-center rounded-xl bg-emerald-500 font-bold text-white">
+          {{ cartItems().reduce((s, i) => s + i.quantity, 0) }}
+        </div>
+        <div>
+          <p class="text-xs text-slate-400">Total belanja</p>
+          <p class="text-sm font-bold text-emerald-400">{{ total == null ? '—' : formatRupiah(total) }}</p>
+        </div>
+      </div>
+      <button
+        class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-500 active:scale-95"
+        type="button"
+        @click="showMobileCart = true"
+      >
+        <span>Lihat Keranjang</span>
+        <IconCart class="size-4" />
       </button>
     </div>
-  </section>
+
+    <!-- Mobile Backdrop -->
+    <div
+      v-if="showMobileCart"
+      class="fixed inset-0 z-30 bg-black/40 backdrop-blur-2xs lg:hidden"
+      @click="showMobileCart = false"
+    ></div>
+  </div>
 </template>
