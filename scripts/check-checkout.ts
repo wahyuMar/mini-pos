@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { cartSubtotal, cashChange, checkoutTotal, transactionNumber } from '../src/domain/checkout.ts'
 import { receiptPreview, wrapText, type ReceiptData } from '../src/services/printer/layout.ts'
+import { createsTransaction, printStatusAfter } from '../src/domain/print-status.ts'
 import { describePrintFailure } from '../src/services/printer/errors.ts'
 
 const lines = [
@@ -42,5 +43,10 @@ assert.equal(describePrintFailure('unavailable', 'Bluetooth no disponible').code
 assert.equal(describePrintFailure('not_found', 'missing').code, 'not_found')
 assert.equal(describePrintFailure('connect_failed', 'socket timed out').code, 'timeout')
 assert.equal(describePrintFailure('', 'Solo Android').code, 'unavailable')
+assert.equal(printStatusAfter(false, false), 'pending')
+assert.equal(printStatusAfter(true, true), 'success')
+assert.equal(printStatusAfter(true, false), 'failed')
+assert.equal(createsTransaction('checkout'), true)
+assert.equal(createsTransaction('retry'), false)
 
 console.log('checkout checks ok')

@@ -70,6 +70,7 @@ export async function saveSale(input: SaleInput): Promise<SavedSale> {
           payment_amount, change_amount, print_status, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
         [number, now.toISOString(), cashierId, subtotal, input.discount, total, input.payment, changeAmount, now.toISOString()],
+        false,
       )
       const id = inserted.changes?.lastId ?? (await insertedId())
       for (const line of input.lines) {
@@ -78,6 +79,7 @@ export async function saveSale(input: SaleInput): Promise<SavedSale> {
             transaction_id, product_id, product_name, quantity, unit_price, subtotal
           ) VALUES (?, ?, ?, ?, ?, ?)`,
           [id, line.productId, line.name, line.quantity, line.unitPrice, lineSubtotal(line.quantity, line.unitPrice)],
+          false,
         )
       }
       await db.commitTransaction()
@@ -90,6 +92,12 @@ export async function saveSale(input: SaleInput): Promise<SavedSale> {
     }
   }
   throw lastError instanceof Error ? lastError : new Error('Nomor transaksi bentrok')
+}
+
+export async function setPrintStatus(id: number, status: 'pending' | 'success' | 'failed'): Promise<void> {
+  await databaseReady()
+  await getDb().run('UPDATE transactions SET print_status = ? WHERE id = ?', [status, id])
+  await persist()
 }
 
 export async function listTransactions(): Promise<TransactionSummary[]> {
