@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+public/sql-wasm.wasm
+public/assets/sql-wasm.wasm
 *.local
 
 # Editor directories and files
