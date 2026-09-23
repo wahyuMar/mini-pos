@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { cartSubtotal, cashChange, checkoutTotal } from '../domain/checkout'
+import { listCategories, type Category } from '../services/database/categories'
 import { listProducts, type Product } from '../services/database/products'
 import { saveSale } from '../services/database/transactions'
 import { deliverReceipt } from '../services/printer/deliver'
@@ -14,6 +15,8 @@ import {
 import { formatRupiah } from '../utils/rupiah'
 
 const products = ref<Product[]>([])
+const categories = ref<Category[]>([])
+const categoryId = ref<number | null>(null)
 const search = ref('')
 const discount = ref(0)
 const payment = ref<number | null>(null)
@@ -26,7 +29,10 @@ const loading = ref(true)
 
 const visibleProducts = computed(() => {
   const term = search.value.trim().toLowerCase()
-  return products.value.filter((product) => product.isActive && product.name.toLowerCase().includes(term))
+  return products.value.filter((product) => {
+    const matchesName = product.isActive && product.name.toLowerCase().includes(term)
+    return matchesName && (categoryId.value == null || product.categoryId === categoryId.value)
+  })
 })
 
 const subtotal = computed(() => cartSubtotal(cartItems()))
@@ -48,7 +54,7 @@ const change = computed(() => {
 
 onMounted(async () => {
   try {
-    products.value = await listProducts()
+    ;[products.value, categories.value] = await Promise.all([listProducts(), listCategories()])
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Produk gagal dimuat'
   } finally {
@@ -103,17 +109,40 @@ async function retryPrint() {
       placeholder="Cari produk"
       type="search"
     />
+    <div class="flex gap-2 overflow-x-auto">
+      <button
+        class="shrink-0 rounded-full px-3 py-1 text-sm"
+        :class="categoryId == null ? 'bg-stone-900 text-white' : 'bg-white'"
+        type="button"
+        @click="categoryId = null"
+      >
+        Semua
+      </button>
+      <button
+        v-for="category in categories"
+        :key="category.id"
+        class="shrink-0 rounded-full px-3 py-1 text-sm"
+        :class="categoryId === category.id ? 'bg-stone-900 text-white' : 'bg-white'"
+        type="button"
+        @click="categoryId = category.id"
+      >
+        {{ category.name }}
+      </button>
+    </div>
     <p v-if="loading" class="text-sm text-stone-500">Memuat produk…</p>
     <p v-else-if="visibleProducts.length === 0" class="text-sm text-stone-500">Belum ada produk aktif.</p>
     <ul v-else class="grid grid-cols-2 gap-2">
       <li v-for="product in visibleProducts" :key="product.id">
         <button
-          class="w-full rounded-xl bg-white p-3 text-left shadow-sm"
+          class="w-full overflow-hidden rounded-xl bg-white text-left shadow-sm"
           type="button"
           @click="addToCart({ id: product.id, name: product.name, price: product.price })"
         >
-          <span class="block font-medium">{{ product.name }}</span>
-          <span class="text-sm text-stone-500">{{ formatRupiah(product.price) }}</span>
+          <img v-if="product.photo" :src="product.photo" alt="" class="h-24 w-full object-cover" />
+          <span class="block p-3">
+            <span class="block font-medium">{{ product.name }}</span>
+            <span class="text-sm text-stone-500">{{ formatRupiah(product.price) }}</span>
+          </span>
         </button>
       </li>
     </ul>

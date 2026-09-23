@@ -3,6 +3,7 @@ import { cartSubtotal, cashChange, checkoutTotal, transactionNumber } from '../s
 import { receiptPreview, wrapText, type ReceiptData } from '../src/services/printer/layout.ts'
 import { createsTransaction, printStatusAfter } from '../src/domain/print-status.ts'
 import { describePrintFailure } from '../src/services/printer/errors.ts'
+import { fittedSize } from '../src/utils/photo.ts'
 
 const lines = [
   { quantity: 2, unitPrice: 10000 },
@@ -49,5 +50,7 @@ assert.equal(printStatusAfter(true, false), 'failed')
 assert.equal(createsTransaction('checkout'), true)
 assert.equal(createsTransaction('retry'), false)
 assert.equal(createsTransaction('reprint'), false)
+assert.deepEqual(fittedSize(1200, 600), { width: 480, height: 240 })
+assert.deepEqual(fittedSize(100, 80), { width: 100, height: 80 })
 
 console.log('checkout checks ok')

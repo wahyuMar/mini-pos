@@ -12,6 +12,11 @@ CREATE TABLE IF NOT EXISTS cashiers (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS categories (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS products (
   id INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
@@ -95,8 +100,19 @@ async function openDatabase(): Promise<void> {
   await db.open()
   await db.execute(SCHEMA)
   await db.execute('PRAGMA foreign_keys = ON')
+  await addColumn(db, 'products', 'category_id', 'INTEGER')
+  await addColumn(db, 'products', 'photo', 'TEXT')
   await seed()
   await persist()
+}
+
+async function addColumn(database: SQLiteDBConnection, table: string, column: string, type: string): Promise<void> {
+  try {
+    await database.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (!/duplicate column/i.test(message)) throw err
+  }
 }
 
 async function seed(): Promise<void> {
