@@ -4,15 +4,20 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/copy-sql-wasm.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/copy-sql-wasm.mjs",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor-community/sqlite": "^8.1.1",
     "@capacitor/android": "^8.5.2",
     "@capacitor/cli": "^8.5.2",
     "@capacitor/core": "^8.5.2",
     "@tailwindcss/vite": "^4.3.3",
+    "jeep-sqlite": "^2.8.0",
+    "sql.js": "^1.11.0",
     "vue": "^3.5.42",
     "vue-router": "^5.3.1"
   },
