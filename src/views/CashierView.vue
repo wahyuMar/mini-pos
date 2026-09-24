@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { cartSubtotal, cashChange, checkoutTotal } from '../domain/checkout'
 import { listCategories, type Category } from '../services/database/categories'
 import { listProducts, type Product } from '../services/database/products'
@@ -37,19 +37,10 @@ const printMessage = ref('')
 const saleId = ref<number | null>(null)
 const loading = ref(true)
 const isPaying = ref(false)
-const showMobileCart = ref(false)
 
-watch(showMobileCart, (isOpen) => {
-  if (typeof document !== 'undefined') {
-    document.body.style.overflow = isOpen ? 'hidden' : ''
-  }
-})
-
-onUnmounted(() => {
-  if (typeof document !== 'undefined') {
-    document.body.style.overflow = ''
-  }
-})
+function scrollToCart() {
+  document.getElementById('cart-panel')?.scrollIntoView({ behavior: 'smooth' })
+}
 
 const visibleProducts = computed(() => {
   const term = search.value.trim().toLowerCase()
@@ -131,7 +122,6 @@ async function pay() {
     payment.value = null
     saleId.value = saved.id
     receipt.value = `${saved.transactionNumber} tersimpan. Kembalian ${formatRupiah(saved.changeAmount)}.`
-    showMobileCart.value = false
 
     const delivered = await deliverReceipt(saved.id)
     printStatus.value = delivered.status
@@ -157,7 +147,7 @@ async function retryPrint() {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div class="space-y-4 pb-10 lg:pb-0">
     <!-- Success / Error notification banners -->
     <div
       v-if="receipt"
@@ -212,7 +202,7 @@ async function retryPrint() {
     <!-- Main Dual-Column POS Layout -->
     <div class="grid grid-cols-1 lg:grid-cols-12 lg:gap-6 items-start">
       <!-- Left Column: Catalog (Search, Categories, Product Grid) -->
-      <section class="lg:col-span-7 xl:col-span-8 space-y-4 pb-28 lg:pb-0">
+      <section class="lg:col-span-7 xl:col-span-8 space-y-4">
         <!-- Search Bar & Mobile Quick Cart Trigger -->
         <div class="flex items-center gap-2">
           <div class="relative flex-1">
@@ -233,12 +223,12 @@ async function retryPrint() {
             </button>
           </div>
 
-          <!-- Mobile Cart Quick Button -->
+          <!-- Mobile Quick Scroll to Cart Button -->
           <button
             class="relative flex size-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200/90 bg-white text-slate-700 shadow-2xs transition-all hover:bg-slate-50 active:scale-95 lg:hidden"
             type="button"
-            title="Buka Keranjang"
-            @click="showMobileCart = true"
+            title="Ke Keranjang Belanja"
+            @click="scrollToCart"
           >
             <IconCart class="size-5" />
             <span
@@ -353,16 +343,12 @@ async function retryPrint() {
         </div>
       </section>
 
-      <!-- Right Column: Cart Panel (Sticky on Desktop, Slide-up Bottom Sheet on Mobile) -->
+      <!-- Right Column: Cart Panel (Sticky on Desktop, Natural Card on Portrait) -->
       <aside
-        class="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-3xl border-t border-slate-200 bg-white p-5 pb-[max(env(safe-area-inset-bottom),1.5rem)] shadow-2xl transition-all duration-300 lg:static lg:col-span-5 lg:z-auto lg:max-h-none lg:rounded-3xl lg:border lg:border-slate-200/90 lg:p-5 lg:shadow-xs xl:col-span-4"
-        :class="
-          showMobileCart
-            ? 'translate-y-0 opacity-100 visible pointer-events-auto'
-            : 'translate-y-full opacity-0 invisible pointer-events-none lg:translate-y-0 lg:opacity-100 lg:visible lg:pointer-events-auto'
-        "
+        id="cart-panel"
+        class="mt-6 w-full rounded-3xl border border-slate-200/90 bg-white p-5 shadow-xs lg:col-span-5 lg:mt-0 lg:sticky lg:top-4 xl:col-span-4"
       >
-        <!-- Mobile Drawer Header Handle -->
+        <!-- Header -->
         <div class="mb-3 flex items-center justify-between lg:mb-4">
           <div class="flex items-center gap-2">
             <div class="flex size-7 items-center justify-center rounded-xl bg-slate-900 text-white">
@@ -377,21 +363,13 @@ async function retryPrint() {
             </span>
           </div>
 
-          <div class="flex items-center gap-2">
+          <div v-if="cartItems().length > 0">
             <button
-              v-if="cartItems().length > 0"
-              class="text-xs font-semibold text-rose-600 hover:text-rose-700"
+              class="text-xs font-semibold text-rose-600 hover:text-rose-700 active:scale-95 transition-all"
               type="button"
               @click="clearCart"
             >
               Kosongkan
-            </button>
-            <button
-              class="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 lg:hidden"
-              type="button"
-              @click="showMobileCart = false"
-            >
-              <IconX class="size-5" />
             </button>
           </div>
         </div>
@@ -529,36 +507,5 @@ async function retryPrint() {
         </div>
       </aside>
     </div>
-
-    <!-- Mobile Floating Checkout Bar (When cart not empty and drawer closed) -->
-    <div
-      v-if="cartItems().length > 0 && !showMobileCart"
-      class="fixed inset-x-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] z-20 flex items-center justify-between rounded-2xl bg-slate-900 p-3.5 text-white shadow-xl shadow-slate-900/30 lg:hidden"
-    >
-      <div class="flex items-center gap-2.5">
-        <div class="flex size-9 items-center justify-center rounded-xl bg-emerald-500 font-bold text-white">
-          {{ cartItems().reduce((s, i) => s + i.quantity, 0) }}
-        </div>
-        <div>
-          <p class="text-xs text-slate-400">Total belanja</p>
-          <p class="text-sm font-bold text-emerald-400">{{ total == null ? '—' : formatRupiah(total) }}</p>
-        </div>
-      </div>
-      <button
-        class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-500 active:scale-95"
-        type="button"
-        @click="showMobileCart = true"
-      >
-        <span>Lihat Keranjang</span>
-        <IconCart class="size-4" />
-      </button>
-    </div>
-
-    <!-- Mobile Backdrop -->
-    <div
-      v-if="showMobileCart"
-      class="fixed inset-0 z-40 bg-black/50 backdrop-blur-xs transition-opacity lg:hidden"
-      @click="showMobileCart = false"
-    ></div>
   </div>
 </template>
