@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { cartSubtotal, cashChange, checkoutTotal } from '../domain/checkout'
 import { listCategories, type Category } from '../services/database/categories'
 import { listProducts, type Product } from '../services/database/products'
@@ -38,6 +38,18 @@ const saleId = ref<number | null>(null)
 const loading = ref(true)
 const isPaying = ref(false)
 const showMobileCart = ref(false)
+
+watch(showMobileCart, (isOpen) => {
+  if (typeof document !== 'undefined') {
+    document.body.style.overflow = isOpen ? 'hidden' : ''
+  }
+})
+
+onUnmounted(() => {
+  if (typeof document !== 'undefined') {
+    document.body.style.overflow = ''
+  }
+})
 
 const visibleProducts = computed(() => {
   const term = search.value.trim().toLowerCase()
@@ -200,23 +212,41 @@ async function retryPrint() {
     <!-- Main Dual-Column POS Layout -->
     <div class="grid grid-cols-1 lg:grid-cols-12 lg:gap-6 items-start">
       <!-- Left Column: Catalog (Search, Categories, Product Grid) -->
-      <section class="lg:col-span-7 xl:col-span-8 space-y-4">
-        <!-- Search Bar -->
-        <div class="relative">
-          <IconSearch class="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-slate-400 pointer-events-none" />
-          <input
-            v-model="search"
-            class="w-full rounded-2xl border border-slate-200/90 bg-white py-2.5 pl-10 pr-9 text-sm text-slate-800 placeholder-slate-400 shadow-2xs transition-all focus:border-emerald-500 focus:outline-none focus:ring-3 focus:ring-emerald-500/15"
-            placeholder="Cari produk berdasarkan nama..."
-            type="search"
-          />
+      <section class="lg:col-span-7 xl:col-span-8 space-y-4 pb-28 lg:pb-0">
+        <!-- Search Bar & Mobile Quick Cart Trigger -->
+        <div class="flex items-center gap-2">
+          <div class="relative flex-1">
+            <IconSearch class="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-slate-400 pointer-events-none" />
+            <input
+              v-model="search"
+              class="w-full rounded-2xl border border-slate-200/90 bg-white py-2.5 pl-10 pr-9 text-sm text-slate-800 placeholder-slate-400 shadow-2xs transition-all focus:border-emerald-500 focus:outline-none focus:ring-3 focus:ring-emerald-500/15"
+              placeholder="Cari produk berdasarkan nama..."
+              type="search"
+            />
+            <button
+              v-if="search"
+              class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              type="button"
+              @click="search = ''"
+            >
+              <IconX class="size-4" />
+            </button>
+          </div>
+
+          <!-- Mobile Cart Quick Button -->
           <button
-            v-if="search"
-            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            class="relative flex size-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200/90 bg-white text-slate-700 shadow-2xs transition-all hover:bg-slate-50 active:scale-95 lg:hidden"
             type="button"
-            @click="search = ''"
+            title="Buka Keranjang"
+            @click="showMobileCart = true"
           >
-            <IconX class="size-4" />
+            <IconCart class="size-5" />
+            <span
+              v-if="cartItems().length > 0"
+              class="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white shadow-xs"
+            >
+              {{ cartItems().reduce((s, i) => s + i.quantity, 0) }}
+            </span>
           </button>
         </div>
 
@@ -323,10 +353,14 @@ async function retryPrint() {
         </div>
       </section>
 
-      <!-- Right Column: Cart Panel (Sticky on Desktop, Modal/Drawer on Mobile) -->
+      <!-- Right Column: Cart Panel (Sticky on Desktop, Slide-up Bottom Sheet on Mobile) -->
       <aside
-        class="fixed inset-x-0 bottom-16 z-40 max-h-[82vh] overflow-y-auto rounded-t-3xl border-t border-slate-200 bg-white p-5 shadow-2xl transition-transform duration-300 lg:static lg:col-span-5 lg:z-auto lg:max-h-none lg:rounded-3xl lg:border lg:border-slate-200/90 lg:p-5 lg:shadow-xs xl:col-span-4"
-        :class="showMobileCart ? 'translate-y-0' : 'translate-y-full lg:translate-y-0'"
+        class="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-3xl border-t border-slate-200 bg-white p-5 pb-[max(env(safe-area-inset-bottom),1.5rem)] shadow-2xl transition-all duration-300 lg:static lg:col-span-5 lg:z-auto lg:max-h-none lg:rounded-3xl lg:border lg:border-slate-200/90 lg:p-5 lg:shadow-xs xl:col-span-4"
+        :class="
+          showMobileCart
+            ? 'translate-y-0 opacity-100 visible pointer-events-auto'
+            : 'translate-y-full opacity-0 invisible pointer-events-none lg:translate-y-0 lg:opacity-100 lg:visible lg:pointer-events-auto'
+        "
       >
         <!-- Mobile Drawer Header Handle -->
         <div class="mb-3 flex items-center justify-between lg:mb-4">
@@ -499,7 +533,7 @@ async function retryPrint() {
     <!-- Mobile Floating Checkout Bar (When cart not empty and drawer closed) -->
     <div
       v-if="cartItems().length > 0 && !showMobileCart"
-      class="fixed inset-x-4 bottom-20 z-20 flex items-center justify-between rounded-2xl bg-slate-900 p-3.5 text-white shadow-xl shadow-slate-900/30 lg:hidden"
+      class="fixed inset-x-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] z-20 flex items-center justify-between rounded-2xl bg-slate-900 p-3.5 text-white shadow-xl shadow-slate-900/30 lg:hidden"
     >
       <div class="flex items-center gap-2.5">
         <div class="flex size-9 items-center justify-center rounded-xl bg-emerald-500 font-bold text-white">
@@ -523,7 +557,7 @@ async function retryPrint() {
     <!-- Mobile Backdrop -->
     <div
       v-if="showMobileCart"
-      class="fixed inset-0 z-30 bg-black/40 backdrop-blur-2xs lg:hidden"
+      class="fixed inset-0 z-40 bg-black/50 backdrop-blur-xs transition-opacity lg:hidden"
       @click="showMobileCart = false"
     ></div>
   </div>
